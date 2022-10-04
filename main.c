@@ -6,7 +6,6 @@
 #define INVADERS_SIZE_Y 4
 #define INVADERS_SIZE_X 11
 
-
 typedef struct Entity{
     char skin;
     int* pos;
