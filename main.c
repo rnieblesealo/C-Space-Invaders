@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define SIZE_X 19
+#define SIZE_X 18
 #define SIZE_Y 11
 #define INVADERS_SIZE_Y 4
 #define INVADERS_SIZE_X 11
@@ -13,6 +13,10 @@
 #define ANSI_COLOR_MAGENTA "\x1b[35m"
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
+
+// ! Relocate
+int score = 0;
+int scorePerKill = 25;
 
 typedef struct Entity{
     char skin;
@@ -90,6 +94,19 @@ void SpawnInvaders(Entity*** grid){
     }
 }
 
+void SpawnWalls(Entity*** grid){
+    int c = 0;
+    for (int i = 0; i < SIZE_X; ++i){
+        if (c > 3){
+            c = 0;
+        }
+        else if (2 <= c && c <= 3){
+            grid[8][i] = NewEntity('*', i, 8);
+        }
+        c++;
+    }
+}
+
 void MoveEntitiesRight(Entity*** grid, int x, int y, int dx, int dy){
 	for (int i = 0; i < INVADERS_SIZE_Y; ++i){
 		for (int j = x + INVADERS_SIZE_X - 1; j > x - 1; --j){
@@ -106,18 +123,35 @@ void MoveEntitiesLeft(Entity*** grid, int x, int y, int dx, int dy){
     }
 }
 
-void DrawGrid(Entity*** grid){
+int InBounds(int x, int y){
+    if ((x < 0 || x >= SIZE_X) || (y < 0 || y>= SIZE_Y))
+        return 0;
+    return 1;
+}
+
+void Draw(Entity*** grid){
+    system("clear");
+    printf(ANSI_COLOR_RED "[SCORE: %d]\n\n" ANSI_COLOR_RESET, score);
     for (int y = 0; y < SIZE_Y; ++y){
-        printf(ANSI_COLOR_YELLOW "# " ANSI_COLOR_RESET);
+        printf(ANSI_COLOR_YELLOW " | " ANSI_COLOR_RESET);
         for (int x = 0; x < SIZE_X; ++x){
             if (grid[y][x] == NULL){
                 printf("   ");
             }
             else{
-                printf(" %c ", grid[y][x]->skin);
+                switch (grid[y][x]->skin){
+                    case '^':
+                        printf(ANSI_COLOR_BLUE " %c " ANSI_COLOR_RESET, grid[y][x]->skin);
+                        break;
+                    case '*':
+                        printf(ANSI_COLOR_GREEN " %c " ANSI_COLOR_RESET, grid[y][x]->skin);
+                        break;
+                    default:
+                        printf(" %c ", grid[y][x]->skin);
+                }
             }
         }
-        printf(ANSI_COLOR_YELLOW " #\n" ANSI_COLOR_RESET);
+        printf(ANSI_COLOR_YELLOW " |\n" ANSI_COLOR_RESET);
     }
 }
 
@@ -137,6 +171,7 @@ int main(){
     Entity* BULLET = NULL;
 
     SpawnInvaders(GRID);
+    SpawnWalls(GRID);
 
     // Store topleft of invaders in memory so that we can easily modify where all invaders go
     int invadersPosition[2] = {0, 0};
@@ -146,7 +181,14 @@ int main(){
         // Make current bullet move up; if the grid space that will be hit is an invader, delete the bullet and the invader
         // ! Add check for when position of bullet target is out of bounds
         if (BULLET != NULL){
-            if (GRID[BULLET->pos[1] - 1][BULLET->pos[0]] != NULL){
+		    // If bullet target not in bounds, erase bullet
+            if (!InBounds(BULLET->pos[0], BULLET->pos[1] - 1)){
+                GRID[BULLET->pos[1]][BULLET->pos[0]] = NULL; // Grid erase
+                free(BULLET);                                // Memory erase
+                BULLET = NULL;                               // Variable reset
+            }
+            
+            else if (GRID[BULLET->pos[1] - 1][BULLET->pos[0]] != NULL){
                 // Set memory alias
                 Entity* dest = GRID[BULLET->pos[1] - 1][BULLET->pos[0]];
 
@@ -160,13 +202,16 @@ int main(){
 
                 // Bullet is now null
                 BULLET = NULL;
+
+                // Increment score
+                score += scorePerKill;
             }
             else{
                 MoveEntity(GRID, BULLET->pos[0], BULLET->pos[1], 0, -1);
             }
         }
                 
-        // Move invaders if time
+        // Move invaders if time is right
         if (time > nextMoveTime){
             if (invadersPosition[0] == (SIZE_X - INVADERS_SIZE_X - 1)){
                 dx = -1;
@@ -184,7 +229,7 @@ int main(){
             nextMoveTime = time + moveTime;
         }
 
-        DrawGrid(GRID);
+        Draw(GRID);
         
         scanf("%c", &i);
         switch (i){
@@ -203,9 +248,7 @@ int main(){
             default:
                 break;
         }
-        system("clear");
         time++;
     }
-
     return 0;
 }
