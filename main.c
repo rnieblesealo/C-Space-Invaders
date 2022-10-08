@@ -1,3 +1,10 @@
+/* TODO
+    - Make enemies shoot
+    - Add way to exit game
+    - Clean up draw function logic
+    - Add game over condition
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -21,9 +28,10 @@ int scorePerKill = 25;
 typedef struct Entity{
     char skin;
     int* pos;
+    int hp;
 } Entity;
 
-Entity* NewEntity(char skin, int pos_x, int pos_y){
+Entity* NewEntity(char skin, int pos_x, int pos_y, int hp){
     Entity* n = (Entity*)malloc(sizeof(Entity));
     
     n->skin = skin;
@@ -32,17 +40,13 @@ Entity* NewEntity(char skin, int pos_x, int pos_y){
     n->pos[0] = pos_x;
     n->pos[1] = pos_y;
 
+    n->hp = hp;
+
     return n;
 }
 
-Entity* GridEntity(Entity*** grid, char skin, int pos_x, int pos_y){
-    Entity* n = NewEntity(skin, pos_x, pos_y);
-
-    n->skin = skin;
-    
-    n->pos = (int*)malloc(sizeof(int) * 2);
-    n->pos[0] = pos_x;
-    n->pos[1] = pos_y;
+Entity* GridEntity(Entity*** grid, char skin, int pos_x, int pos_y, int hp){
+    Entity* n = NewEntity(skin, pos_x, pos_y, hp);
 
     // Add to grid before returning
     grid[pos_y][pos_x] = n;
@@ -89,7 +93,7 @@ void MoveEntity(Entity*** grid, int pos_x, int pos_y, int dx, int dy){
 void SpawnInvaders(Entity*** grid){
     for (int y = 0; y < INVADERS_SIZE_Y; ++y){
         for (int x = 0; x < INVADERS_SIZE_X; ++x){
-            grid[y][x] = NewEntity('M', x, y);
+            grid[y][x] = NewEntity('M', x, y, 1);
         }
     }
 }
@@ -101,7 +105,7 @@ void SpawnWalls(Entity*** grid){
             c = 0;
         }
         else if (2 <= c && c <= 3){
-            grid[8][i] = NewEntity('*', i, 8);
+            grid[8][i] = NewEntity('*', i, 8, 3);
         }
         c++;
     }
@@ -131,6 +135,7 @@ int InBounds(int x, int y){
 
 void Draw(Entity*** grid){
     system("clear");
+    //printf(ANSI_COLOR_MAGENTA "[SPACE INVADERS]\n" ANSI_COLOR_RESET);
     printf(ANSI_COLOR_RED "[SCORE: %d]\n\n" ANSI_COLOR_RESET, score);
     for (int y = 0; y < SIZE_Y; ++y){
         printf(ANSI_COLOR_YELLOW " | " ANSI_COLOR_RESET);
@@ -167,7 +172,7 @@ int main(){
     void (*moveFunction)(Entity*** grid, int x, int y, int dx, int dy);
 
     Entity*** GRID = InitializeGrid();
-    Entity* PLAYER = GridEntity(GRID, 'A', 0, SIZE_Y - 1);
+    Entity* PLAYER = GridEntity(GRID, 'A', 0, SIZE_Y - 1, 1);
     Entity* BULLET = NULL;
 
     SpawnInvaders(GRID);
@@ -192,20 +197,29 @@ int main(){
                 // Set memory alias
                 Entity* dest = GRID[BULLET->pos[1] - 1][BULLET->pos[0]];
 
-                // Remove destroyed and bullet from grid
-                GRID[BULLET->pos[1] - 1][BULLET->pos[0]] = NULL;
+                // If target HP will be depleted after damage, kill
+                if (dest->hp - 1 <= 0){
+                    // Remove destroyed and bullet from grid
+                    GRID[BULLET->pos[1] - 1][BULLET->pos[0]] = NULL;
+                    
+                    // Free destroyed from memory
+                    free(dest);
+
+                    // Increment score
+                    score += scorePerKill;
+                }
+
+                // Otherwise just decrement HP of target
+                else{
+                    dest->hp--;
+                }
+
+                // Free bullet every time it hits something
                 GRID[BULLET->pos[1]][BULLET->pos[0]] = NULL;
-                
-                // Free bullet and destroyed from memory
-                free(dest);
                 free(BULLET);
-
-                // Bullet is now null
                 BULLET = NULL;
-
-                // Increment score
-                score += scorePerKill;
             }
+            
             else{
                 MoveEntity(GRID, BULLET->pos[0], BULLET->pos[1], 0, -1);
             }
@@ -242,7 +256,7 @@ int main(){
             case 's':
                 // Fire!
                 if (BULLET == NULL){
-                    BULLET = GridEntity(GRID, '^', PLAYER->pos[0], PLAYER->pos[1] - 1);
+                    BULLET = GridEntity(GRID, '^', PLAYER->pos[0], PLAYER->pos[1] - 1, -1);
                 }
                 break;
             default:
