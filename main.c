@@ -1,268 +1,253 @@
-/* TODO
-    - Make enemies shoot
-    - Add way to exit game
-    - Clean up draw function logic
-    - Add game over condition
+// ASCII Space Invaders in C by Rafael Niebles.
+// Do not distribute! <3
+
+/* BUGS/WEIRDNESS:
+    - Moving an entity outside the display's X bounds works fine, but for Y bound, a segfault occurs
 */
 
 #include <stdio.h>
 #include <stdlib.h>
 
-#define SIZE_X 18
-#define SIZE_Y 11
-#define INVADERS_SIZE_Y 4
-#define INVADERS_SIZE_X 11
+#define MAX_INPUT_LENGTH 1024
 
-#define ANSI_COLOR_RED     "\x1b[31m"
-#define ANSI_COLOR_GREEN   "\x1b[32m"
-#define ANSI_COLOR_YELLOW  "\x1b[33m"
-#define ANSI_COLOR_BLUE    "\x1b[34m"
-#define ANSI_COLOR_MAGENTA "\x1b[35m"
-#define ANSI_COLOR_CYAN    "\x1b[36m"
-#define ANSI_COLOR_RESET   "\x1b[0m"
+#define X_SIZE 10
+#define Y_SIZE 18
 
-// ! Relocate
-int score = 0;
-int scorePerKill = 25;
+#define K_SHOOT 'c'
+#define K_MOVE_UP 'w'
+#define K_MOVE_DOWN 's'
+#define K_MOVE_LEFT 'a'
+#define K_MOVE_RIGHT 'd'
+
+#define X_INVADER_COUNT 6
+#define Y_INVADER_COUNT 4
+
+#define SKIN_PLAYER 'A'
+#define SKIN_INVADER 'M'
+
+enum Direction{
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT
+};
+
+typedef struct Vector2{
+    int x;
+    int y;
+} Vector2;
 
 typedef struct Entity{
+    Vector2 position;
     char skin;
-    int* pos;
-    int hp;
+    int alive;
 } Entity;
 
-Entity* NewEntity(char skin, int pos_x, int pos_y, int hp){
-    Entity* n = (Entity*)malloc(sizeof(Entity));
-    
-    n->skin = skin;
-    
-    n->pos = (int*)malloc(sizeof(int) * 2);
-    n->pos[0] = pos_x;
-    n->pos[1] = pos_y;
+// Constructors
+Vector2 new_Vector2(int x, int y);
+Entity new_Entity(Vector2 position, char skin);
 
-    n->hp = hp;
+// Display
+char** InitDisplay();
+void ClearDisplay(char** display);
+void Display(char** display);
+void DrawEntity(char** display, Entity e);
 
-    return n;
-}
+// Input
+char GetCommand();
 
-Entity* GridEntity(Entity*** grid, char skin, int pos_x, int pos_y, int hp){
-    Entity* n = NewEntity(skin, pos_x, pos_y, hp);
-
-    // Add to grid before returning
-    grid[pos_y][pos_x] = n;
-    return n;
-}
-
-Entity*** InitializeGrid(){
-    Entity*** grid = (Entity***)malloc(SIZE_Y * sizeof(Entity**));
-    for (int y = 0; y < SIZE_Y; ++y){
-        Entity** row = (Entity**)malloc(SIZE_X * sizeof(Entity*));
-        for (int x = 0; x < SIZE_X; ++x){
-            row[x] = NULL;
-        }
-        grid[y] = row;
-    }
-    return grid;
-}   
-
-void MoveEntity(Entity*** grid, int pos_x, int pos_y, int dx, int dy){
-    // First check if coordinates are in bounds
-    if ((pos_x < 0 || pos_x >= SIZE_X) || (pos_y < 0 || pos_y >= SIZE_Y) || (pos_x + dx < 0 || pos_x + dx >= SIZE_X) || (pos_y + dy < 0 || pos_y + dy >= SIZE_Y)){
-        return;
-    }
-    
-    // Obtain temp, write values to pointed to entity if there is one at all
-    Entity* temp = grid[pos_y + dy][pos_x + dx];
-    
-    if (temp != NULL){
-        temp->pos[0] = pos_x;
-        temp->pos[1] = pos_y;
-    }
-    
-    // Write values to target node if it is not null as well
-    if (grid[pos_y][pos_x] != NULL){
-        grid[pos_y][pos_x]->pos[0] = pos_x + dx;
-        grid[pos_y][pos_x]->pos[1] = pos_y + dy;
-    }
-    
-    // Perform swap
-    grid[pos_y + dy][pos_x + dx] = grid[pos_y][pos_x];
-    grid[pos_y][pos_x] = temp;
-}
-
-void SpawnInvaders(Entity*** grid){
-    for (int y = 0; y < INVADERS_SIZE_Y; ++y){
-        for (int x = 0; x < INVADERS_SIZE_X; ++x){
-            grid[y][x] = NewEntity('M', x, y, 1);
-        }
-    }
-}
-
-void SpawnWalls(Entity*** grid){
-    int c = 0;
-    for (int i = 0; i < SIZE_X; ++i){
-        if (c > 3){
-            c = 0;
-        }
-        else if (2 <= c && c <= 3){
-            grid[8][i] = NewEntity('*', i, 8, 3);
-        }
-        c++;
-    }
-}
-
-void MoveEntitiesRight(Entity*** grid, int x, int y, int dx, int dy){
-	for (int i = 0; i < INVADERS_SIZE_Y; ++i){
-		for (int j = x + INVADERS_SIZE_X - 1; j > x - 1; --j){
-		    MoveEntity(grid, j, i, dx, dy);
-		}
-	}
-}
-
-void MoveEntitiesLeft(Entity*** grid, int x, int y, int dx, int dy){
-    for (int i = y; i < y + INVADERS_SIZE_Y; ++i){
-        for (int j = x; j < x + INVADERS_SIZE_X; ++j){
-            MoveEntity(grid, j, i, dx, dy);
-        }
-    }
-}
-
-int InBounds(int x, int y){
-    if ((x < 0 || x >= SIZE_X) || (y < 0 || y>= SIZE_Y))
-        return 0;
-    return 1;
-}
-
-void Draw(Entity*** grid){
-    system("clear");
-    //printf(ANSI_COLOR_MAGENTA "[SPACE INVADERS]\n" ANSI_COLOR_RESET);
-    printf(ANSI_COLOR_RED "[SCORE: %d]\n\n" ANSI_COLOR_RESET, score);
-    for (int y = 0; y < SIZE_Y; ++y){
-        printf(ANSI_COLOR_YELLOW " | " ANSI_COLOR_RESET);
-        for (int x = 0; x < SIZE_X; ++x){
-            if (grid[y][x] == NULL){
-                printf("   ");
-            }
-            else{
-                switch (grid[y][x]->skin){
-                    case '^':
-                        printf(ANSI_COLOR_BLUE " %c " ANSI_COLOR_RESET, grid[y][x]->skin);
-                        break;
-                    case '*':
-                        printf(ANSI_COLOR_GREEN " %c " ANSI_COLOR_RESET, grid[y][x]->skin);
-                        break;
-                    default:
-                        printf(" %c ", grid[y][x]->skin);
-                }
-            }
-        }
-        printf(ANSI_COLOR_YELLOW " |\n" ANSI_COLOR_RESET);
-    }
-}
+// Game
+Entity** InitInvaders();
+void DrawInvaders(char** display, Entity** invaders);
+void MoveInvaders(Entity** invaders, enum Direction dir);
 
 int main(){
-    int running = 1;
-    int time = 0;
-    int moveTime = 2;
-    int nextMoveTime = moveTime;
+    char** display = InitDisplay();
 
-    int dx = 1; // How much to move invaders by
+    Entity** invaders = InitInvaders();
 
-    // Function pointer to move function
-    void (*moveFunction)(Entity*** grid, int x, int y, int dx, int dy);
-
-    Entity*** GRID = InitializeGrid();
-    Entity* PLAYER = GridEntity(GRID, 'A', 0, SIZE_Y - 1, 1);
-    Entity* BULLET = NULL;
-
-    SpawnInvaders(GRID);
-    SpawnWalls(GRID);
-
-    // Store topleft of invaders in memory so that we can easily modify where all invaders go
-    int invadersPosition[2] = {0, 0};
-
-    char i;
-    while (running){
-        // Make current bullet move up; if the grid space that will be hit is an invader, delete the bullet and the invader
-        // ! Add check for when position of bullet target is out of bounds
-        if (BULLET != NULL){
-		    // If bullet target not in bounds, erase bullet
-            if (!InBounds(BULLET->pos[0], BULLET->pos[1] - 1)){
-                GRID[BULLET->pos[1]][BULLET->pos[0]] = NULL; // Grid erase
-                free(BULLET);                                // Memory erase
-                BULLET = NULL;                               // Variable reset
-            }
-            
-            else if (GRID[BULLET->pos[1] - 1][BULLET->pos[0]] != NULL){
-                // Set memory alias
-                Entity* dest = GRID[BULLET->pos[1] - 1][BULLET->pos[0]];
-
-                // If target HP will be depleted after damage, kill
-                if (dest->hp - 1 <= 0){
-                    // Remove destroyed and bullet from grid
-                    GRID[BULLET->pos[1] - 1][BULLET->pos[0]] = NULL;
-                    
-                    // Free destroyed from memory
-                    free(dest);
-
-                    // Increment score
-                    score += scorePerKill;
-                }
-
-                // Otherwise just decrement HP of target
-                else{
-                    dest->hp--;
-                }
-
-                // Free bullet every time it hits something
-                GRID[BULLET->pos[1]][BULLET->pos[0]] = NULL;
-                free(BULLET);
-                BULLET = NULL;
-            }
-            
-            else{
-                MoveEntity(GRID, BULLET->pos[0], BULLET->pos[1], 0, -1);
-            }
-        }
-                
-        // Move invaders if time is right
-        if (time > nextMoveTime){
-            if (invadersPosition[0] == (SIZE_X - INVADERS_SIZE_X - 1)){
-                dx = -1;
-                moveFunction = &MoveEntitiesLeft;
-            }
-
-            else if (invadersPosition[0] == 0){
-                dx = 1;
-                moveFunction = &MoveEntitiesRight;
-            }
-            
-            moveFunction(GRID, invadersPosition[0], invadersPosition[1], dx, 0);
-            invadersPosition[0] += dx;
-
-            nextMoveTime = time + moveTime;
-        }
-
-        Draw(GRID);
+    int quit = 0;
+    while (!quit){
+        ClearDisplay(display);
         
-        scanf("%c", &i);
-        switch (i){
-            case 'a':
-                MoveEntity(GRID, PLAYER->pos[0], PLAYER->pos[1], -1, 0);
+        // Add entity drawing code here!
+        DrawInvaders(display, invaders);
+        
+        Display(display);
+        
+        // Obtain input, match to keycode, if no match, advance game!
+        char command = GetCommand();
+        switch (command){
+            case K_MOVE_UP:
+                MoveInvaders(invaders, UP);
                 break;
-            case 'd':
-                MoveEntity(GRID, PLAYER->pos[0], PLAYER->pos[1], 1, 0);
+            case K_MOVE_DOWN:
+                MoveInvaders(invaders, DOWN);
                 break;
-            case 's':
-                // Fire!
-                if (BULLET == NULL){
-                    BULLET = GridEntity(GRID, '^', PLAYER->pos[0], PLAYER->pos[1] - 1, -1);
-                }
+            case K_MOVE_LEFT:
+                MoveInvaders(invaders, LEFT);
+                break;
+            case K_MOVE_RIGHT:
+                MoveInvaders(invaders, RIGHT);
+                break;
+            case K_SHOOT:
+                // Add shoot
                 break;
             default:
                 break;
         }
-        time++;
+
+        // Add game update code here!
     }
+
+    Display(display);
+
     return 0;
+}
+
+Vector2 new_Vector2(int x, int y){
+    Vector2 n;
+
+    n.x = x;
+    n.y = y;
+
+    return n;
+}
+
+Entity new_Entity(Vector2 position, char skin){
+    Entity e;
+
+    e.position.x = position.x;
+    e.position.y = position.y;
+
+    e.skin = skin;
+    
+    // All entities are alive by default
+    e.alive = 1;
+
+    return e;
+}
+
+char** InitDisplay(){
+    // Make rows and columns of display into a 2D char array, initialize all chars to ' '
+    char** rows = (char**)malloc(Y_SIZE * sizeof(char*));
+
+    for (int y = 0; y < Y_SIZE; ++y){
+        rows[y] = (char*)malloc(X_SIZE * sizeof(char));
+        
+        for (int x = 0; x < X_SIZE; ++x){
+            rows[y][x] = ' ';
+        }
+    }
+
+    return rows;
+}
+
+void ClearDisplay(char** display){
+    // Clear console/terminal
+    // NOTE This is not portable and works only in UNIX-like environments!
+    system("clear");
+    
+    // Clear display by replacing all characters with whitespace
+    for (int y = 0; y < Y_SIZE; ++y){
+        for (int x = 0; x < X_SIZE; ++x){
+            display[y][x] = ' ';
+        }
+    }
+}
+
+void Display(char** display){
+    // Show the display as-is
+    for (int y = 0; y < Y_SIZE; ++y){
+        putchar('[');
+        for (int x = 0; x < X_SIZE; ++x){
+            printf(" %c ", display[y][x]);
+        }
+        puts("]");
+    }
+}
+
+void DrawEntity(char** display, Entity e){
+    // Add an entity to the display
+    display[e.position.y][e.position.x] = e.skin;
+}
+
+char GetCommand(){
+    char input[MAX_INPUT_LENGTH];
+    char firstInput = 0;
+    
+    // Use fgets to clear input buffer
+    fgets(input, MAX_INPUT_LENGTH, stdin);
+    firstInput = input[0];
+
+    // Make first input lowercase if it is a letter so program isn't case-sensitive
+    if (firstInput >= 'A' && firstInput <= 'Z'){
+        firstInput += 32;
+    }
+
+    return firstInput;
+}
+
+Entity** InitInvaders(){
+    // Allocate invader row
+    Entity** rows = (Entity**)malloc(Y_INVADER_COUNT * sizeof(Entity*));
+    
+    // Allocate columns
+    for (int y = 0; y < Y_INVADER_COUNT; ++y){
+        rows[y] = (Entity*)malloc(X_INVADER_COUNT * sizeof(Entity));
+        
+        for (int x = 0; x < X_INVADER_COUNT; ++x){
+            // Make invaders!
+            rows[y][x] = new_Entity(new_Vector2(x, y), SKIN_INVADER);
+        }
+    }
+
+    return rows;
+}
+
+void DrawInvaders(char** display, Entity** invaders){
+    // Draw invaders that are alive
+    for (int y = 0; y < Y_INVADER_COUNT; ++y){
+        for (int x = 0; x < X_INVADER_COUNT; ++x){
+            if (invaders[y][x].alive){
+                DrawEntity(display, invaders[y][x]);
+            }
+        }
+    }
+}
+
+void MoveInvaders(Entity** invaders, enum Direction dir){
+    // Determine direction
+    int dx;
+    int dy;
+    switch (dir){
+        case UP:
+            dx = 0;
+            dy = -1;
+            break;
+        case DOWN:
+            dx = 0;
+            dy = 1;
+            break;
+        case LEFT:
+            dx = -1;
+            dy = 0;
+            break;
+        case RIGHT:
+            dx = 1;
+            dy = 0;
+            break;
+        default:
+            break;
+    }
+    
+    // Move invaders that are alive
+    for (int y = 0; y < Y_INVADER_COUNT; ++y){
+        for (int x = 0; x < X_INVADER_COUNT; ++x){
+            if (invaders[y][x].alive){
+                invaders[y][x].position.x += dx;
+                invaders[y][x].position.y += dy;
+            }
+        }
+    }
 }
