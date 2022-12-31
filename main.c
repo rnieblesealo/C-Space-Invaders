@@ -22,6 +22,8 @@
 #define X_INVADER_COUNT 6
 #define Y_INVADER_COUNT 4
 
+#define PLAYER_ROW 10
+
 #define SKIN_PLAYER 'A'
 #define SKIN_INVADER 'M'
 
@@ -43,27 +45,45 @@ typedef struct Entity{
     int alive;
 } Entity;
 
-// Constructors
-Vector2 new_Vector2(int x, int y);
-Entity new_Entity(Vector2 position, char skin);
+// Static Constructors
+Vector2 new_s_Vector2(int x, int y);
+Entity new_s_Entity(Vector2 position, char skin);
+
+// Dynamic Constructors
+Entity* new_d_Entity(Vector2 position, char skin){
+    Entity* e = (Entity*)malloc(sizeof(Entity));
+
+    e->position.x = position.x;
+    e->position.y = position.y;
+
+    e->skin = skin;
+    
+    // All entities are alive by default
+    e->alive = 1;
+
+    return e;
+}
 
 // Display
 char** InitDisplay();
 void ClearDisplay(char** display);
 void Display(char** display);
-void DrawEntity(char** display, Entity e);
+void DrawEntity(char** display, Entity* e);
+void DrawEntities(char** display, Entity** es);
 
 // Input
 char GetCommand();
 
 // Game
+void MoveEntity(Entity* e, enum Direction dir);
+void MoveEntities(Entity** es, enum Direction dir);
+Entity* InitPlayer();
 Entity** InitInvaders();
-void DrawInvaders(char** display, Entity** invaders);
-void MoveInvaders(Entity** invaders, enum Direction dir);
 
 int main(){
     char** display = InitDisplay();
 
+    Entity* player = InitPlayer();
     Entity** invaders = InitInvaders();
 
     int quit = 0;
@@ -71,7 +91,8 @@ int main(){
         ClearDisplay(display);
         
         // Add entity drawing code here!
-        DrawInvaders(display, invaders);
+        DrawEntities(display, invaders);
+        DrawEntity(display, player);
         
         Display(display);
         
@@ -79,16 +100,16 @@ int main(){
         char command = GetCommand();
         switch (command){
             case K_MOVE_UP:
-                MoveInvaders(invaders, UP);
+                MoveEntity(player, UP);
                 break;
             case K_MOVE_DOWN:
-                MoveInvaders(invaders, DOWN);
+                MoveEntity(player, DOWN);
                 break;
             case K_MOVE_LEFT:
-                MoveInvaders(invaders, LEFT);
+                MoveEntity(player, LEFT);
                 break;
             case K_MOVE_RIGHT:
-                MoveInvaders(invaders, RIGHT);
+                MoveEntity(player, RIGHT);
                 break;
             case K_SHOOT:
                 // Add shoot
@@ -105,7 +126,7 @@ int main(){
     return 0;
 }
 
-Vector2 new_Vector2(int x, int y){
+Vector2 new_s_Vector2(int x, int y){
     Vector2 n;
 
     n.x = x;
@@ -114,7 +135,7 @@ Vector2 new_Vector2(int x, int y){
     return n;
 }
 
-Entity new_Entity(Vector2 position, char skin){
+Entity new_s_Entity(Vector2 position, char skin){
     Entity e;
 
     e.position.x = position.x;
@@ -167,9 +188,20 @@ void Display(char** display){
     }
 }
 
-void DrawEntity(char** display, Entity e){
+void DrawEntity(char** display, Entity* e){
     // Add an entity to the display
-    display[e.position.y][e.position.x] = e.skin;
+    display[e->position.y][e->position.x] = e->skin;
+}
+
+void DrawEntities(char** display, Entity** es){
+    // Draw entities that are alive
+    for (int y = 0; y < Y_INVADER_COUNT; ++y){
+        for (int x = 0; x < X_INVADER_COUNT; ++x){
+            if (es[y][x].alive){
+                DrawEntity(display, &es[y][x]);
+            }
+        }
+    }
 }
 
 char GetCommand(){
@@ -188,35 +220,41 @@ char GetCommand(){
     return firstInput;
 }
 
-Entity** InitInvaders(){
-    // Allocate invader row
-    Entity** rows = (Entity**)malloc(Y_INVADER_COUNT * sizeof(Entity*));
-    
-    // Allocate columns
-    for (int y = 0; y < Y_INVADER_COUNT; ++y){
-        rows[y] = (Entity*)malloc(X_INVADER_COUNT * sizeof(Entity));
-        
-        for (int x = 0; x < X_INVADER_COUNT; ++x){
-            // Make invaders!
-            rows[y][x] = new_Entity(new_Vector2(x, y), SKIN_INVADER);
-        }
+void MoveEntity(Entity* e, enum Direction dir){
+    // Do nothing if entity is not alive
+    if (!e->alive)
+        return;
+
+    // Determine position change
+    int dx = 0;
+    int dy = 0;
+    switch (dir){
+        case UP:
+            dx = 0;
+            dy = -1;
+            break;
+        case DOWN:
+            dx = 0;
+            dy = 1;
+            break;
+        case LEFT:
+            dx = -1;
+            dy = 0;
+            break;
+        case RIGHT:
+            dx = 1;
+            dy = 0;
+            break;
+        default:
+            break;
     }
 
-    return rows;
+    // Apply position change to entity
+    e->position.x += dx;
+    e->position.y += dy;
 }
 
-void DrawInvaders(char** display, Entity** invaders){
-    // Draw invaders that are alive
-    for (int y = 0; y < Y_INVADER_COUNT; ++y){
-        for (int x = 0; x < X_INVADER_COUNT; ++x){
-            if (invaders[y][x].alive){
-                DrawEntity(display, invaders[y][x]);
-            }
-        }
-    }
-}
-
-void MoveInvaders(Entity** invaders, enum Direction dir){
+void MoveEntities(Entity** es, enum Direction dir){
     // Determine direction
     int dx;
     int dy;
@@ -244,10 +282,33 @@ void MoveInvaders(Entity** invaders, enum Direction dir){
     // Move invaders that are alive
     for (int y = 0; y < Y_INVADER_COUNT; ++y){
         for (int x = 0; x < X_INVADER_COUNT; ++x){
-            if (invaders[y][x].alive){
-                invaders[y][x].position.x += dx;
-                invaders[y][x].position.y += dy;
+            if (es[y][x].alive){
+                es[y][x].position.x += dx;
+                es[y][x].position.y += dy;
             }
         }
     }
+}
+
+Entity* InitPlayer(){
+    // Shorthand for creating the player
+    Entity* player = new_d_Entity(new_s_Vector2(0, PLAYER_ROW), SKIN_PLAYER);
+    return player;
+}
+
+Entity** InitInvaders(){
+    // Allocate invader row
+    Entity** rows = (Entity**)malloc(Y_INVADER_COUNT * sizeof(Entity*));
+    
+    // Allocate columns
+    for (int y = 0; y < Y_INVADER_COUNT; ++y){
+        rows[y] = (Entity*)malloc(X_INVADER_COUNT * sizeof(Entity));
+        
+        for (int x = 0; x < X_INVADER_COUNT; ++x){
+            // Make invaders!
+            rows[y][x] = new_s_Entity(new_s_Vector2(x, y), SKIN_INVADER);
+        }
+    }
+
+    return rows;
 }
