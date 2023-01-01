@@ -10,8 +10,8 @@
 
 #define MAX_INPUT_LENGTH 1024
 
-#define X_SIZE 10
-#define Y_SIZE 18
+#define X_SIZE 12
+#define Y_SIZE 11
 
 #define K_SHOOT 'c'
 #define K_MOVE_UP 'w'
@@ -19,13 +19,16 @@
 #define K_MOVE_LEFT 'a'
 #define K_MOVE_RIGHT 'd'
 
-#define X_INVADER_COUNT 6
+#define X_INVADER_COUNT 8
 #define Y_INVADER_COUNT 4
 
-#define PLAYER_ROW 10
+#define PLAYER_ROW 8
+#define WALL_ROW 6
 
 #define SKIN_PLAYER 'A'
+#define SKIN_PLAYER_BULLET '|'
 #define SKIN_INVADER 'M'
+#define SKIN_INVADER_BULLET '*'
 
 enum Direction{
     UP,
@@ -64,6 +67,12 @@ Entity* new_d_Entity(Vector2 position, char skin){
     return e;
 }
 
+// Memory Helpers
+void FreeEntity(Entity** e_ptr){
+    free(*e_ptr);
+    *e_ptr = NULL;
+}
+
 // Display
 char** InitDisplay();
 void ClearDisplay(char** display);
@@ -75,8 +84,10 @@ void DrawEntities(char** display, Entity** es);
 char GetCommand();
 
 // Game
-void MoveEntity(Entity* e, enum Direction dir);
-void MoveEntities(Entity** es, enum Direction dir);
+int Collision(Entity a, Entity b); // TODO Implement!
+int MoveEntity(Entity* e, enum Direction dir);      // Returns 1 if entity moved, 0 if it didn't 
+int MoveEntities(Entity** es, enum Direction dir);  // Returns 1 if all entities moved, 0 if they didn't
+int Shoot(Entity* player, Entity** bullet_ptr);     // Returns 1 if shot was fired, 0 if it wasn't
 Entity* InitPlayer();
 Entity** InitInvaders();
 
@@ -84,6 +95,8 @@ int main(){
     char** display = InitDisplay();
 
     Entity* player = InitPlayer();
+    Entity* player_bullet = NULL;
+    
     Entity** invaders = InitInvaders();
 
     int quit = 0;
@@ -93,18 +106,19 @@ int main(){
         // Add entity drawing code here!
         DrawEntities(display, invaders);
         DrawEntity(display, player);
+        DrawEntity(display, player_bullet);
         
         Display(display);
         
         // Obtain input, match to keycode, if no match, advance game!
         char command = GetCommand();
         switch (command){
-            case K_MOVE_UP:
-                MoveEntity(player, UP);
-                break;
-            case K_MOVE_DOWN:
-                MoveEntity(player, DOWN);
-                break;
+            // case K_MOVE_UP:
+            //     MoveEntity(player, UP);
+            //     break;
+            // case K_MOVE_DOWN:
+            //     MoveEntity(player, DOWN);
+            //     break;
             case K_MOVE_LEFT:
                 MoveEntity(player, LEFT);
                 break;
@@ -112,13 +126,19 @@ int main(){
                 MoveEntity(player, RIGHT);
                 break;
             case K_SHOOT:
-                // Add shoot
+                Shoot(player, &player_bullet);
                 break;
             default:
                 break;
         }
 
-        // Add game update code here!
+        // Check if player bullet is colliding with something
+
+
+        // Otherwise, try and move bullet, if it is unable to, destroy it!
+        if (!MoveEntity(player_bullet, UP)){
+            FreeEntity(&player_bullet);
+        }
     }
 
     Display(display);
@@ -189,6 +209,10 @@ void Display(char** display){
 }
 
 void DrawEntity(char** display, Entity* e){
+    if (e == NULL){
+        return;
+    }
+
     // Add an entity to the display
     display[e->position.y][e->position.x] = e->skin;
 }
@@ -220,10 +244,10 @@ char GetCommand(){
     return firstInput;
 }
 
-void MoveEntity(Entity* e, enum Direction dir){
-    // Do nothing if entity is not alive
-    if (!e->alive)
-        return;
+int MoveEntity(Entity* e, enum Direction dir){
+    // Do nothing if entity is not alive or is null
+    if (e == NULL || !e->alive)
+        return 0;
 
     // Determine position change
     int dx = 0;
@@ -249,12 +273,17 @@ void MoveEntity(Entity* e, enum Direction dir){
             break;
     }
 
-    // Apply position change to entity
-    e->position.x += dx;
-    e->position.y += dy;
+    // Apply position change to entity if it would end up in bounds
+    if (e->position.x + dx >= 0 && e->position.x + dx < X_SIZE && e->position.y + dy >= 0 && e->position.y + dy < Y_SIZE){
+        e->position.x += dx;
+        e->position.y += dy;
+        return 1;
+    }
+
+    return 0;
 }
 
-void MoveEntities(Entity** es, enum Direction dir){
+int MoveEntities(Entity** es, enum Direction dir){
     // Determine direction
     int dx;
     int dy;
@@ -279,7 +308,9 @@ void MoveEntities(Entity** es, enum Direction dir){
             break;
     }
     
-    // Move invaders that are alive
+    // TODO Check if all bounding entities can move
+
+    // Move entities that are alive, no in-bounds checking because we should do this outside this function
     for (int y = 0; y < Y_INVADER_COUNT; ++y){
         for (int x = 0; x < X_INVADER_COUNT; ++x){
             if (es[y][x].alive){
@@ -288,6 +319,19 @@ void MoveEntities(Entity** es, enum Direction dir){
             }
         }
     }
+
+    return 1;
+}
+
+int Shoot(Entity* player, Entity** bullet_ptr){
+    // Do not create a new bullet if one already exists (only one bullet onscreen at a time)
+    if (*bullet_ptr != NULL){
+        return 0;
+    }
+
+    // If current bullet is free, make new one!
+    *bullet_ptr = new_d_Entity(new_s_Vector2(player->position.x, player->position.y - 1), SKIN_PLAYER_BULLET);
+    return 1;
 }
 
 Entity* InitPlayer(){
