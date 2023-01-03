@@ -10,7 +10,11 @@
 
 #define MAX_INPUT_LENGTH 1024
 
-#define X_SIZE 12
+#define B_GREEN "\e[1;32m"
+#define B_WHITE "\e[1;37m"
+#define C_RESET "\e[0m"
+
+#define X_SIZE 14
 #define Y_SIZE 11
 
 #define K_SHOOT 'c'
@@ -22,15 +26,18 @@
 #define X_INVADER_COUNT 8
 #define Y_INVADER_COUNT 4
 
-#define PLAYER_ROW 8
-#define WALL_ROW 6
+#define PLAYER_ROW 10
+#define WALL_ROW 7
 
 #define SKIN_PLAYER 'A'
 #define SKIN_PLAYER_BULLET '|'
 #define SKIN_INVADER 'M'
 #define SKIN_INVADER_BULLET '*'
+#define SKIN_WALL '='
 
 #define INVADER_MOVE_TICKS 2
+#define WALL_WIDTH 2
+#define WALL_COUNT 4
 
 enum Direction{
 	UP,
@@ -80,7 +87,7 @@ char** InitDisplay();
 void ClearDisplay(char** display, int clearTerminal);
 void Display(char** display);
 void DrawEntity(char** display, Entity* e);
-void DrawEntities(char** display, Entity** es);
+void DrawEntities(char** display, Entity* es, int count);
 
 // Input
 char GetCommand();
@@ -91,6 +98,7 @@ int MoveEntity(Entity* e, enum Direction dir);      // Returns 1 if entity moved
 int MoveEntities(Entity** es, enum Direction dir);  // Returns 1 if all entities moved, 0 if they didn't
 int Shoot(Entity* player, Entity** bullet_ptr);     // Returns 1 if shot was fired, 0 if it wasn't
 Entity* InitPlayer();
+Entity* InitWalls();
 Entity** InitInvaders();
 
 int main(){
@@ -98,6 +106,7 @@ int main(){
 	
 	// Constant Game Components
 	Entity** invaders = InitInvaders();
+	Entity* walls = InitWalls();
 	Entity* player = InitPlayer();
 	
 	// Variable Game Components
@@ -116,7 +125,12 @@ int main(){
 
 		/* Add entity drawing code here! */
 		
-		DrawEntities(display, invaders);
+		// Draw invader matrix
+		for (int y = 0; y < Y_INVADER_COUNT; ++y){
+			DrawEntities(display, invaders[y], X_INVADER_COUNT);
+		}
+		
+		DrawEntities(display, walls, WALL_COUNT);
 		DrawEntity(display, player);
 		DrawEntity(display, player_bullet);
 
@@ -263,7 +277,20 @@ void Display(char** display){
 	for (int y = 0; y < Y_SIZE; ++y){
 		putchar('[');
 		for (int x = 0; x < X_SIZE; ++x){
-			printf(" %c ", display[y][x]);
+			// Add color to display members
+			switch (display[y][x]){
+				case SKIN_PLAYER:
+					printf(B_GREEN " %c " C_RESET, SKIN_PLAYER);	
+					break;
+				case SKIN_PLAYER_BULLET:
+					printf(B_GREEN " %c " C_RESET, SKIN_PLAYER_BULLET); 
+					break;
+				case SKIN_INVADER:
+					printf(B_WHITE " %c " C_RESET, SKIN_INVADER);
+					break;
+				default:
+					printf(" %c ", display[y][x]);
+			}
 		}
 		puts("]");
 	}
@@ -273,18 +300,16 @@ void DrawEntity(char** display, Entity* e){
 	if (e == NULL){
 		return;
 	}
-
+	
 	// Add an entity to the display
 	display[e->position.y][e->position.x] = e->skin;
 }
 
-void DrawEntities(char** display, Entity** es){
+void DrawEntities(char** display, Entity* es, int count){
 	// Draw entities that are alive
-	for (int y = 0; y < Y_INVADER_COUNT; ++y){
-		for (int x = 0; x < X_INVADER_COUNT; ++x){
-			if (es[y][x].alive){
-				DrawEntity(display, &es[y][x]);
-			}
+	for (int i = 0; i < count; ++i){
+		if (es[i].alive){
+			DrawEntity(display, &es[i]);
 		}
 	}
 }
@@ -377,8 +402,6 @@ int MoveEntities(Entity** es, enum Direction dir){
 			break;
 	}
 
-	// TODO Check if all bounding entities can move
-
 	// Move entities that are alive, no in-bounds checking because we should do this outside this function
 	for (int y = 0; y < Y_INVADER_COUNT; ++y){
 		for (int x = 0; x < X_INVADER_COUNT; ++x){
@@ -407,6 +430,16 @@ Entity* InitPlayer(){
 	// Shorthand for creating the player
 	Entity* player = new_d_Entity(new_s_Vector2(0, PLAYER_ROW), SKIN_PLAYER);
 	return player;
+}
+
+Entity* InitWalls(){
+	// Create a dynamic array containing the row of walls
+	Entity* walls = (Entity*)malloc(WALL_COUNT * WALL_WIDTH * sizeof(Entity));
+
+	// Initialize their x positions according to parameters
+	// TODO Figure this out!	
+
+	return walls;
 }
 
 Entity** InitInvaders(){
