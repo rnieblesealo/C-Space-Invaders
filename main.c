@@ -30,6 +30,8 @@
 #define SKIN_INVADER 'M'
 #define SKIN_INVADER_BULLET '*'
 
+#define INVADER_MOVE_TICKS 2
+
 enum Direction{
 	UP,
 	DOWN,
@@ -75,7 +77,7 @@ void FreeEntity(Entity** e_ptr){
 
 // Display
 char** InitDisplay();
-void ClearDisplay(char** display);
+void ClearDisplay(char** display, int clearTerminal);
 void Display(char** display);
 void DrawEntity(char** display, Entity* e);
 void DrawEntities(char** display, Entity** es);
@@ -93,17 +95,27 @@ Entity** InitInvaders();
 
 int main(){
 	char** display = InitDisplay();
-
-	Entity* player = InitPlayer();
-	Entity* player_bullet = NULL;
-
+	
+	// Constant Game Components
 	Entity** invaders = InitInvaders();
+	Entity* player = InitPlayer();
+	
+	// Variable Game Components
+	Entity* player_bullet = NULL;
+	Entity* rInvader = NULL;
+	Entity* lInvader = NULL;
 
+	// Game Variables
+	enum Direction invaderMoveDirection = RIGHT;
+	int ticks = -1; // Initialize ticks to -1 so that game begins at 0 ticks rather than 1
+	
+	// Game Loop
 	int quit = 0;
 	while (!quit){
-		ClearDisplay(display);
+		ClearDisplay(display, 1);
 
-		// Add entity drawing code here!
+		/* Add entity drawing code here! */
+		
 		DrawEntities(display, invaders);
 		DrawEntity(display, player);
 		DrawEntity(display, player_bullet);
@@ -132,6 +144,43 @@ int main(){
 				break;
 		}
 		
+		/* Add game update code here! */
+		
+		// Get new rInvader & lInvader if the current ones aren't alive
+		if (rInvader == NULL || !rInvader->alive){
+			for (int y = 0; y < Y_INVADER_COUNT; ++y){
+				for (int x = 0; x < X_INVADER_COUNT; ++x){
+					// Get rInvader
+					if (rInvader == NULL || invaders[y][x].position.x > rInvader->position.x){
+						rInvader = &invaders[y][x];
+					}
+					
+					// Get lInvader
+					if (lInvader == NULL || invaders[y][x].position.x < lInvader->position.x){
+						lInvader = &invaders[y][x];
+					}
+				}
+			}	
+		}	
+
+		// Show R&L invader info (disable terminal clearing!)
+		//printf("UPPER RIGHTMOST INVADER: (%d, %d)\n", rInvader->position.x, rInvader->position.y);
+		//printf("UPPER LEFTMOST INVADER: (%d, %d)\n", lInvader->position.x, lInvader->position.y);
+
+		// Move invaders when time is OK (Time is OK when it is a multiple of INVADER_MOVE_TICKS		
+		if (ticks % INVADER_MOVE_TICKS == 0){		
+			if (rInvader->position.x >= X_SIZE - 1){
+				invaderMoveDirection = LEFT;
+			}
+			
+			else if (lInvader->position.x <= 0){
+				invaderMoveDirection = RIGHT;
+			}
+
+			// Move invaders towards appropriate direction
+			MoveEntities(invaders, invaderMoveDirection);
+		}
+
 		// Try and move bullet, if it is unable to, meaning it has left bounds, destroy it!
 		if (!MoveEntity(player_bullet, UP)){
 			FreeEntity(&player_bullet);
@@ -146,7 +195,10 @@ int main(){
 					FreeEntity(&player_bullet);
 				}
 			}
-		}	
+		}
+
+		// Advance ticks
+		ticks++;
 	}
 
 	Display(display);
@@ -192,10 +244,11 @@ char** InitDisplay(){
 	return rows;
 }
 
-void ClearDisplay(char** display){
+void ClearDisplay(char** display, int clearTerminal){
 	// Clear console/terminal
 	// NOTE This is not portable and works only in UNIX-like environments!
-	system("clear");
+	if (clearTerminal)
+		system("clear");
 
 	// Clear display by replacing all characters with whitespace
 	for (int y = 0; y < Y_SIZE; ++y){
