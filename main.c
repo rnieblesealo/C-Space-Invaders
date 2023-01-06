@@ -36,8 +36,14 @@
 #define SKIN_WALL '='
 
 #define INVADER_MOVE_TICKS 2
+
 #define WALL_WIDTH 2
+#define WALL_SPACE 2
 #define WALL_COUNT 4
+
+#define HEALTH_PLAYER 3
+#define HEALTH_WALL 3
+#define HEALTH_INVADER 1
 
 enum Direction{
 	UP,
@@ -54,33 +60,25 @@ typedef struct Vector2{
 typedef struct Entity{
 	Vector2 position;
 	char skin;
+	int health;
 	int alive;
 } Entity;
 
 // Static Constructors
 Vector2 new_s_Vector2(int x, int y);
-Entity new_s_Entity(Vector2 position, char skin);
+Entity new_s_Entity(Vector2 position, char skin, int health);
 
 // Dynamic Constructors
-Entity* new_d_Entity(Vector2 position, char skin){
-	Entity* e = (Entity*)malloc(sizeof(Entity));
-
-	e->position.x = position.x;
-	e->position.y = position.y;
-
-	e->skin = skin;
-
-	// All entities are alive by default
-	e->alive = 1;
-
-	return e;
-}
+Entity* new_d_Entity(Vector2 position, char skin, int health);
 
 // Memory Helpers
 void FreeEntity(Entity** e_ptr){
 	free(*e_ptr);
 	*e_ptr = NULL;
 }
+
+// Update 
+void UpdateEntity(Entity* e);
 
 // Display
 char** InitDisplay();
@@ -130,7 +128,7 @@ int main(){
 			DrawEntities(display, invaders[y], X_INVADER_COUNT);
 		}
 		
-		DrawEntities(display, walls, WALL_COUNT);
+		DrawEntities(display, walls, WALL_COUNT * WALL_WIDTH);
 		DrawEntity(display, player);
 		DrawEntity(display, player_bullet);
 
@@ -200,16 +198,35 @@ int main(){
 			FreeEntity(&player_bullet);
 		}
 
-		// Check if player bullet is colliding with something once it has moved, if so, destroy it
+		// [Invader Update Loop]
 		for (int y = 0; y < Y_INVADER_COUNT; ++y){
-			for (int x = 0; x < X_INVADER_COUNT; ++x){
+			for (int x = 0; x < X_INVADER_COUNT; ++x){	
+				// Check if player bullet is colliding with something once it has moved, if so, destroy it
 				if (Collision(player_bullet, &invaders[y][x])){
-					// If so, kill the invader at the bullet's position and kill the bullet itself
-					invaders[y][x].alive = 0;
+					// If so, deplete health of invader at the bullet's position and kill the bullet itself
+					invaders[y][x].health--;
 					FreeEntity(&player_bullet);
 				}
+			
+				// Update invader at (x, y)
+				UpdateEntity(&invaders[y][x]);
 			}
 		}
+
+		// [Walls Update Loop]
+		for (int i = 0; i < WALL_COUNT * WALL_WIDTH; ++i){
+			// Make walls vulnerable to player bullets
+			//if (Collision(player_bullet, &walls[i])){
+			//	walls[i].health--;
+			//	FreeEntity(&player_bullet);
+			//}
+			
+			// Update wall
+			UpdateEntity(&walls[i]);
+		}
+
+		// [Player Update]
+		UpdateEntity(player);
 
 		// Advance ticks
 		ticks++;
@@ -229,7 +246,7 @@ Vector2 new_s_Vector2(int x, int y){
 	return n;
 }
 
-Entity new_s_Entity(Vector2 position, char skin){
+Entity new_s_Entity(Vector2 position, char skin, int health){
 	Entity e;
 
 	e.position.x = position.x;
@@ -237,10 +254,35 @@ Entity new_s_Entity(Vector2 position, char skin){
 
 	e.skin = skin;
 
+	e.health = health;
+
 	// All entities are alive by default
 	e.alive = 1;
 
 	return e;
+}
+
+Entity* new_d_Entity(Vector2 position, char skin, int health){
+	Entity* e = (Entity*)malloc(sizeof(Entity));
+
+	e->position.x = position.x;
+	e->position.y = position.y;
+
+	e->skin = skin;
+	
+	e->health = health;
+
+	// All entities are alive by default
+	e->alive = 1;
+
+	return e;
+}
+
+void UpdateEntity(Entity* e){
+	// Kill entity on health deplete
+	if (e->health <= 0){
+		e->alive = 0;
+	}
 }
 
 char** InitDisplay(){
@@ -284,6 +326,9 @@ void Display(char** display){
 					break;
 				case SKIN_PLAYER_BULLET:
 					printf(B_GREEN " %c " C_RESET, SKIN_PLAYER_BULLET); 
+					break;	
+				case SKIN_WALL:
+					printf(B_GREEN " %c " C_RESET, SKIN_WALL);
 					break;
 				case SKIN_INVADER:
 					printf(B_WHITE " %c " C_RESET, SKIN_INVADER);
@@ -422,13 +467,13 @@ int Shoot(Entity* player, Entity** bullet_ptr){
 	}
 
 	// If current bullet is free, make new one!
-	*bullet_ptr = new_d_Entity(new_s_Vector2(player->position.x, player->position.y - 1), SKIN_PLAYER_BULLET);
+	*bullet_ptr = new_d_Entity(new_s_Vector2(player->position.x, player->position.y - 1), SKIN_PLAYER_BULLET, 1);
 	return 1;
 }
 
 Entity* InitPlayer(){
 	// Shorthand for creating the player
-	Entity* player = new_d_Entity(new_s_Vector2(0, PLAYER_ROW), SKIN_PLAYER);
+	Entity* player = new_d_Entity(new_s_Vector2(0, PLAYER_ROW), SKIN_PLAYER, HEALTH_PLAYER);
 	return player;
 }
 
@@ -437,8 +482,14 @@ Entity* InitWalls(){
 	Entity* walls = (Entity*)malloc(WALL_COUNT * WALL_WIDTH * sizeof(Entity));
 
 	// Initialize their x positions according to parameters
-	// TODO Figure this out!	
-
+	int index = 0;
+	for (int i = 0; i < WALL_COUNT; ++i){	
+		for (int j = 0; j < WALL_WIDTH; ++j){
+			walls[index] = new_s_Entity(new_s_Vector2(index + (i * WALL_SPACE), WALL_ROW), SKIN_WALL, HEALTH_WALL);
+			index++;
+		}
+	}
+	
 	return walls;
 }
 
@@ -452,7 +503,7 @@ Entity** InitInvaders(){
 
 		for (int x = 0; x < X_INVADER_COUNT; ++x){
 			// Make invaders!
-			rows[y][x] = new_s_Entity(new_s_Vector2(x, y), SKIN_INVADER);
+			rows[y][x] = new_s_Entity(new_s_Vector2(x, y), SKIN_INVADER, HEALTH_INVADER);
 		}
 	}
 
