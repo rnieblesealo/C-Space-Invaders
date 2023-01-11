@@ -98,6 +98,7 @@ int Shoot(Entity* player, Entity** bullet_ptr);     // Returns 1 if shot was fir
 Entity* InitPlayer();
 Entity* InitWalls();
 Entity** InitInvaders();
+Vector2 PickRandomEntity(Entity** es, int x_size, int y_size);
 
 int main(){
 	char** display = InitDisplay();
@@ -119,7 +120,7 @@ int main(){
 	// Game Loop
 	int quit = 0;
 	while (!quit){
-		ClearDisplay(display, 1);
+		ClearDisplay(display, 0);
 
 		/* Add entity drawing code here! */
 		
@@ -227,6 +228,10 @@ int main(){
 
 		// [Player Update]
 		UpdateEntity(player);
+		
+		// DEBUG: Pick random invader [REMOVE THIS]
+		Vector2 invaderPosition = PickRandomEntity(invaders, X_INVADER_COUNT, Y_INVADER_COUNT);
+		printf("%d %d", invaderPosition.x, invaderPosition.y);
 
 		// Advance ticks
 		ticks++;
@@ -509,3 +514,23 @@ Entity** InitInvaders(){
 
 	return rows;
 }
+
+Vector2 PickRandomEntity(Entity** es, int x_size, int y_size){
+	Vector2 possiblePositions[x_size * y_size];
+	
+	// Look at all living entities and copy their positions to possiblePositions
+	int k = 0;
+	for (int i = 0; i < y_size; ++i){
+		for (int j = 0; j < x_size; ++j){
+			if (es[i][j].alive){
+				possiblePositions[k].x = es[i][j].position.x;
+				possiblePositions[k].y = es[i][j].position.y;
+				++k;
+			}
+		}
+	}
+	
+	// Return random position
+	return possiblePositions[rand() % k]; 
+}
+
