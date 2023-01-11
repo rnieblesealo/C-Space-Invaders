@@ -3,7 +3,7 @@
 
 /* BUGS/WEIRDNESS:
    	- FIXME Moving an entity outside the display's X bounds works fine, but for Y bound, a segfault occurs
-	- FIXME At a certain point in the game, rInvader & lInvaders aren't picked correctly (Maybe they don't ever get picked correctly ;o)	
+	- FIXED At a certain point in the game, rInvader & lInvaders aren't picked correctly (Maybe they don't ever get picked correctly ;o)	
 */
 
 #include <stdio.h>
@@ -101,13 +101,15 @@ char GetCommand();
 
 // Game
 int Collision(Entity* a, Entity* b);
-int MoveEntity(Entity* e, enum Direction dir);      			// Returns 1 if entity moved, 0 if it didn't 
-int MoveEntities(Entity** es, enum Direction dir);  			// Returns 1 if all entities moved, 0 if they didn't
-int Shoot(Vector2 shoot_point, Entity** bullet_ptr, int is_player);    	// Returns 1 if shot was fired, 0 if it wasn't
+int MoveEntity(Entity* e, enum Direction dir);      				// Returns 1 if entity moved, 0 if it didn't 
+int MoveEntities(Entity** es, enum Direction dir);  				// Returns 1 if all entities moved, 0 if they didn't
+int Shoot(Vector2 shoot_point, Entity** bullet_ptr, int is_player);    		// Returns 1 if shot was fired, 0 if it wasn't
 Entity* InitPlayer();
 Entity* InitWalls();
 Entity** InitInvaders();
+Entity* PickBoundingEntity(Entity** es, int side, int x_size, int y_size);  	// 0 picks left bounding invader, 1 picks right bounding invader
 Vector2 PickRandomEntity(Entity** es, int x_size, int y_size);
+
 
 int main(){
 	// Seed random number generator
@@ -186,25 +188,14 @@ int main(){
 		}
 		
 		// Get new rInvader & lInvader if the current ones aren't alive
-		if (rInvader == NULL || !rInvader->alive){
-			for (int y = 0; y < Y_INVADER_COUNT; ++y){
-				for (int x = 0; x < X_INVADER_COUNT; ++x){
-					// Get rInvader
-					if (rInvader == NULL || invaders[y][x].position.x > rInvader->position.x){
-						rInvader = &invaders[y][x];
-					}
-					
-					// Get lInvader
-					if (lInvader == NULL || invaders[y][x].position.x < lInvader->position.x){
-						lInvader = &invaders[y][x];
-					}
-				}
-			}	
+		if (lInvader == NULL || !lInvader->alive){
+			lInvader = PickBoundingEntity(invaders, 0, X_INVADER_COUNT, Y_INVADER_COUNT);
+			printf("%d\n", lInvader == NULL);
 		}	
-
-		// Show R&L invader info (disable terminal clearing!)
-		//printf("UPPER RIGHTMOST INVADER: (%d, %d)\n", rInvader->position.x, rInvader->position.y);
-		//printf("UPPER LEFTMOST INVADER: (%d, %d)\n", lInvader->position.x, lInvader->position.y);
+		
+		if (rInvader == NULL || !rInvader->alive){
+			rInvader = PickBoundingEntity(invaders, 1, X_INVADER_COUNT, Y_INVADER_COUNT);
+		}
 
 		// Move invaders when time is OK (Time is OK when it is a multiple of INVADER_MOVE_TICKS		
 		if (ticks % INVADER_MOVE_TICKS == 0){		
@@ -577,6 +568,21 @@ Entity** InitInvaders(){
 	}
 
 	return rows;
+}
+
+Entity* PickBoundingEntity(Entity** es, int side, int x_size, int y_size){
+	Entity* candidate = NULL; // Current picked bounding entity
+	
+	for (int y = 0; y < y_size; ++y){
+		for (int x = 0; x < x_size; ++x){
+			// Get left or right bounding entity depending on side parameter
+			if (candidate == NULL || ((side == 0) ? (es[y][x].position.x < candidate->position.x) : (es[y][x].position.x > candidate->position.x))){
+				candidate = &es[y][x];
+			}		
+		}
+	}
+
+	return candidate;
 }
 
 Vector2 PickRandomEntity(Entity** es, int x_size, int y_size){
