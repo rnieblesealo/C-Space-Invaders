@@ -1,16 +1,20 @@
-// ASCII Space Invaders in C by Rafael Niebles.
+
 // Do not distribute! <3
 
 /* BUGS/WEIRDNESS:
-   - Moving an entity outside the display's X bounds works fine, but for Y bound, a segfault occurs
+   	- FIXME Moving an entity outside the display's X bounds works fine, but for Y bound, a segfault occurs
+	- FIXME At a certain point in the game, rInvader & lInvaders aren't picked correctly (Maybe they don't ever get picked correctly ;o)	
 */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define MAX_INPUT_LENGTH 1024
 
 #define B_GREEN "\e[1;32m"
+#define B_RED "\e[1;31m"
+#define B_YELLOW "\e[1;33m"
 #define B_WHITE "\e[1;37m"
 #define C_RESET "\e[0m"
 
@@ -22,6 +26,7 @@
 #define K_MOVE_DOWN 's'
 #define K_MOVE_LEFT 'a'
 #define K_MOVE_RIGHT 'd'
+#define K_QUIT 'q'
 
 #define X_INVADER_COUNT 8
 #define Y_INVADER_COUNT 4
@@ -32,7 +37,7 @@
 #define SKIN_PLAYER 'A'
 #define SKIN_PLAYER_BULLET '|'
 #define SKIN_INVADER 'M'
-#define SKIN_INVADER_BULLET '*'
+#define SKIN_INVADER_BULLET 'v'
 #define SKIN_WALL '='
 
 #define INVADER_MOVE_TICKS 2
@@ -44,6 +49,8 @@
 #define HEALTH_PLAYER 3
 #define HEALTH_WALL 3
 #define HEALTH_INVADER 1
+
+#define SCORE_PER_KILL 25
 
 enum Direction{
 	UP,
@@ -84,6 +91,8 @@ void UpdateEntity(Entity* e);
 char** InitDisplay();
 void ClearDisplay(char** display, int clearTerminal);
 void Display(char** display);
+void DisplayScore(int score);
+void DisplayPrompt();
 void DrawEntity(char** display, Entity* e);
 void DrawEntities(char** display, Entity* es, int count);
 
@@ -92,15 +101,18 @@ char GetCommand();
 
 // Game
 int Collision(Entity* a, Entity* b);
-int MoveEntity(Entity* e, enum Direction dir);      // Returns 1 if entity moved, 0 if it didn't 
-int MoveEntities(Entity** es, enum Direction dir);  // Returns 1 if all entities moved, 0 if they didn't
-int Shoot(Entity* player, Entity** bullet_ptr);     // Returns 1 if shot was fired, 0 if it wasn't
+int MoveEntity(Entity* e, enum Direction dir);      			// Returns 1 if entity moved, 0 if it didn't 
+int MoveEntities(Entity** es, enum Direction dir);  			// Returns 1 if all entities moved, 0 if they didn't
+int Shoot(Vector2 shoot_point, Entity** bullet_ptr, int is_player);    	// Returns 1 if shot was fired, 0 if it wasn't
 Entity* InitPlayer();
 Entity* InitWalls();
 Entity** InitInvaders();
 Vector2 PickRandomEntity(Entity** es, int x_size, int y_size);
 
 int main(){
+	// Seed random number generator
+	srand(time(NULL));
+	
 	char** display = InitDisplay();
 	
 	// Constant Game Components
@@ -110,30 +122,36 @@ int main(){
 	
 	// Variable Game Components
 	Entity* player_bullet = NULL;
+	Entity* invader_bullet = NULL;
 	Entity* rInvader = NULL;
 	Entity* lInvader = NULL;
 
 	// Game Variables
 	enum Direction invaderMoveDirection = RIGHT;
+	int score = 0;
 	int ticks = -1; // Initialize ticks to -1 so that game begins at 0 ticks rather than 1
 	
 	// Game Loop
 	int quit = 0;
 	while (!quit){
-		ClearDisplay(display, 0);
+		ClearDisplay(display, 1);
 
-		/* Add entity drawing code here! */
-		
+		/* Add drawing code here! */
+	
+		DrawEntity(display, player);
+		DrawEntity(display, player_bullet);
+		DrawEntity(display, invader_bullet);
+
 		// Draw invader matrix
 		for (int y = 0; y < Y_INVADER_COUNT; ++y){
 			DrawEntities(display, invaders[y], X_INVADER_COUNT);
 		}
 		
 		DrawEntities(display, walls, WALL_COUNT * WALL_WIDTH);
-		DrawEntity(display, player);
-		DrawEntity(display, player_bullet);
-
+		
+		DisplayScore(score);
 		Display(display);
+		DisplayPrompt();
 
 		// Obtain input, match to keycode, if no match, advance game!
 		char command = GetCommand();
@@ -151,13 +169,21 @@ int main(){
 				MoveEntity(player, RIGHT);
 				break;
 			case K_SHOOT:
-				Shoot(player, &player_bullet);
+				Shoot(player->position, &player_bullet, 1);
 				break;
+			case K_QUIT:
+				quit = 1;
 			default:
 				break;
 		}
 		
 		/* Add game update code here! */
+		
+		// Enemies shoot whenever there is no active enemy bullet
+		if (invader_bullet == NULL){
+			Vector2 invaderBulletOrigin = PickRandomEntity(invaders, X_INVADER_COUNT, Y_INVADER_COUNT);
+			Shoot(invaderBulletOrigin, &invader_bullet, 0); 
+		}
 		
 		// Get new rInvader & lInvader if the current ones aren't alive
 		if (rInvader == NULL || !rInvader->alive){
@@ -194,9 +220,14 @@ int main(){
 			MoveEntities(invaders, invaderMoveDirection);
 		}
 
-		// Try and move bullet, if it is unable to, meaning it has left bounds, destroy it!
+		// Try and move player bullet, if it is unable to, meaning it has left bounds, destroy it!
 		if (!MoveEntity(player_bullet, UP)){
 			FreeEntity(&player_bullet);
+		}
+
+		// Try and move invader bullet, if it is unable to, meaning it has left bounds, destroy it!
+		if (!MoveEntity(invader_bullet, DOWN)){
+			FreeEntity(&invader_bullet);
 		}
 
 		// [Invader Update Loop]
@@ -207,6 +238,9 @@ int main(){
 					// If so, deplete health of invader at the bullet's position and kill the bullet itself
 					invaders[y][x].health--;
 					FreeEntity(&player_bullet);
+				
+					// Also give player score for their kill
+					score += SCORE_PER_KILL; 
 				}
 			
 				// Update invader at (x, y)
@@ -221,7 +255,13 @@ int main(){
 			//	walls[i].health--;
 			//	FreeEntity(&player_bullet);
 			//}
-			
+		
+			// Make walls vulnerable to invader bullets
+			if (Collision(invader_bullet, &walls[i])){
+				walls[i].health--;
+				FreeEntity(&invader_bullet);
+			}
+
 			// Update wall
 			UpdateEntity(&walls[i]);
 		}
@@ -229,15 +269,26 @@ int main(){
 		// [Player Update]
 		UpdateEntity(player);
 		
-		// DEBUG: Pick random invader [REMOVE THIS]
-		Vector2 invaderPosition = PickRandomEntity(invaders, X_INVADER_COUNT, Y_INVADER_COUNT);
-		printf("%d %d", invaderPosition.x, invaderPosition.y);
+		// If the player collides with the enemy bullet, the game is over
+		if (Collision(player, invader_bullet)){
+			break;
+		}
 
+		// Enemies shoot whenever invader bullets are null
 		// Advance ticks
 		ticks++;
 	}
 
-	Display(display);
+	ClearDisplay(display, 1);
+
+	// When inner loop is broken but quit is not true (player has died), print game over message.
+	if (quit){
+		puts(B_YELLOW "Thanks for playing!" C_RESET);
+	}
+
+	else{
+		puts(B_RED "Game Over!" C_RESET);
+	}
 
 	return 0;
 }
@@ -338,12 +389,25 @@ void Display(char** display){
 				case SKIN_INVADER:
 					printf(B_WHITE " %c " C_RESET, SKIN_INVADER);
 					break;
+				case SKIN_INVADER_BULLET:
+					printf(B_WHITE " %c " C_RESET, SKIN_INVADER_BULLET);
+					break;
 				default:
 					printf(" %c ", display[y][x]);
 			}
 		}
 		puts("]");
 	}
+}
+
+void DisplayScore(int score){
+	// Displays score neatly
+	printf("[ " B_YELLOW "SCORE:" C_RESET " %d ]\n", score);
+}
+
+void DisplayPrompt(){
+	// Displays a caret for the game command prompt
+	printf(B_YELLOW ":" C_RESET);
 }
 
 void DrawEntity(char** display, Entity* e){
@@ -465,14 +529,14 @@ int MoveEntities(Entity** es, enum Direction dir){
 	return 1;
 }
 
-int Shoot(Entity* player, Entity** bullet_ptr){
+int Shoot(Vector2 shoot_point, Entity** bullet_ptr, int is_player){
 	// Do not create a new bullet if one already exists (only one bullet onscreen at a time)
 	if (*bullet_ptr != NULL){
 		return 0;
 	}
 
 	// If current bullet is free, make new one!
-	*bullet_ptr = new_d_Entity(new_s_Vector2(player->position.x, player->position.y - 1), SKIN_PLAYER_BULLET, 1);
+	*bullet_ptr = new_d_Entity(new_s_Vector2(shoot_point.x, shoot_point.y - 1), is_player ? SKIN_PLAYER_BULLET : SKIN_INVADER_BULLET, 1);
 	return 1;
 }
 
