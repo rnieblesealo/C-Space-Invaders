@@ -7,6 +7,12 @@
 	- FIXED At a certain point in the game, rInvader & lInvaders aren't picked correctly (Maybe they don't ever get picked correctly ;o)	
 */
 
+
+/* TODO:
+ 	- Game end condition
+	- See if running out of invaders causes random shooter generator to go boom
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
