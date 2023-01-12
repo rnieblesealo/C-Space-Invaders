@@ -1,4 +1,5 @@
-
+// Space Invaders implemented in C using ASCII characters.
+// Copyright Rafael Niebles 2022-2023.
 // Do not distribute! <3
 
 /* BUGS/WEIRDNESS:
@@ -11,6 +12,7 @@
 #include <time.h>
 
 #define MAX_INPUT_LENGTH 1024
+#define SAVEFILE "save"
 
 #define B_GREEN "\e[1;32m"
 #define B_RED "\e[1;31m"
@@ -91,7 +93,7 @@ void UpdateEntity(Entity* e);
 char** InitDisplay();
 void ClearDisplay(char** display, int clearTerminal);
 void Display(char** display);
-void DisplayScore(int score);
+void DisplayScore(int score, int high_score);
 void DisplayPrompt();
 void DrawEntity(char** display, Entity* e);
 void DrawEntities(char** display, Entity* es, int count);
@@ -110,6 +112,9 @@ Entity** InitInvaders();
 Entity* PickBoundingEntity(Entity** es, int side, int x_size, int y_size);  	// 0 picks left bounding invader, 1 picks right bounding invader
 Vector2 PickRandomEntity(Entity** es, int x_size, int y_size);
 
+// IO
+int WriteHighscore(int high_score);
+int ReadHighscore(int* score);
 
 int main(){
 	// Seed random number generator
@@ -131,8 +136,14 @@ int main(){
 	// Game Variables
 	enum Direction invaderMoveDirection = RIGHT;
 	int score = 0;
+	int highScore = -1;
 	int ticks = -1; // Initialize ticks to -1 so that game begins at 0 ticks rather than 1
 	
+	// Try and read high score
+	if (!ReadHighscore(&highScore)){
+		puts(B_RED "Failed to read high score!" C_RESET);
+	}
+
 	// Game Loop
 	int quit = 0;
 	while (!quit){
@@ -151,7 +162,7 @@ int main(){
 		
 		DrawEntities(display, walls, WALL_COUNT * WALL_WIDTH);
 		
-		DisplayScore(score);
+		DisplayScore(score, highScore);
 		Display(display);
 		DisplayPrompt();
 
@@ -280,6 +291,15 @@ int main(){
 	else{
 		puts(B_RED "Game Over!" C_RESET);
 	}
+	
+	// Try to write highscore
+	if (WriteHighscore(score)){
+		puts("High score written successfully!");
+	}
+
+	else{
+		puts(B_RED "Failed to write high score!" C_RESET);
+	}
 
 	return 0;
 }
@@ -391,9 +411,15 @@ void Display(char** display){
 	}
 }
 
-void DisplayScore(int score){
-	// Displays score neatly
-	printf("[ " B_YELLOW "SCORE:" C_RESET " %d ]\n", score);
+void DisplayScore(int score, int high_score){
+	// Displays score neatly	
+	if (high_score < 0){			
+		printf("[ " B_YELLOW "SCORE:" C_RESET " %d ]\n", score);
+		return;
+	}
+	
+	// Print high score too if it is valid
+	printf("[ " B_YELLOW "SCORE:" C_RESET " %d | " B_YELLOW "HIGH SCORE:" C_RESET " %d ]\n", score, high_score);
 }
 
 void DisplayPrompt(){
@@ -604,3 +630,44 @@ Vector2 PickRandomEntity(Entity** es, int x_size, int y_size){
 	return possiblePositions[rand() % k]; 
 }
 
+int WriteHighscore(int high_score){
+	// Get file
+	FILE* f_score = fopen(SAVEFILE, "w");
+	
+	// Failcase
+	if (f_score == NULL){
+		return 0;
+	}
+	
+	// Write high score
+	fprintf(f_score, "%d", high_score);
+	
+	fclose(f_score);
+
+	return 1;
+}
+
+int ReadHighscore(int* score){
+	// Failcase on null score pointer
+	if (score == NULL){
+		return 0;
+	}
+	
+	FILE* f_score = fopen(SAVEFILE, "r");
+
+	// Failcase on null score file
+	if (f_score == NULL){
+		return 0;
+	}
+
+	// Read highscore
+	int readScore = -1;
+	if (!fscanf(f_score, "%d", &readScore) || readScore < 0){
+		return 0;
+	}
+
+	// If all OK write high score
+	*score = readScore;
+	return 1;
+	
+}
