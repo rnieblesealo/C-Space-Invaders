@@ -143,8 +143,9 @@ int main(){
 	enum Direction invaderMoveDirection = RIGHT;
 	int score = 0;
 	int highScore = -1;
-	int ticks = -1; // Initialize ticks to -1 so that game begins at 0 ticks rather than 1
-	
+	int ticks = -1; 						// Initialize ticks to -1 so that game begins at 0 ticks rather than 1
+	int livingEntities = Y_INVADER_COUNT * X_INVADER_COUNT; 	// Every time an invader dies this count goes down by 1; once it's 0, game ends
+
 	// Try and read high score
 	if (!ReadHighscore(&highScore)){
 		puts(B_RED "Failed to read high score!" C_RESET);
@@ -153,7 +154,12 @@ int main(){
 	// Game Loop
 	int quit = 0;
 	while (!quit){
-		ClearDisplay(display, 1);
+		// Before another game loop begins, check if the game has ended (all entities are dead)
+		if (livingEntities == 0){
+			break;
+		}
+		
+		ClearDisplay(display, 0);
 
 		/* Add drawing code here! */
 	
@@ -171,7 +177,7 @@ int main(){
 		DisplayScore(score, highScore);
 		Display(display);
 		DisplayPrompt();
-
+			
 		// Obtain input, match to keycode, if no match, advance game!
 		char command = GetCommand();
 		switch (command){
@@ -248,7 +254,10 @@ int main(){
 					FreeEntity(&player_bullet);
 				
 					// Also give player score for their kill
-					score += SCORE_PER_KILL; 
+					score += SCORE_PER_KILL;
+
+					// Amount of living entities goes down
+					livingEntities--;	
 				}
 			
 				// Update invader at (x, y)
@@ -295,7 +304,14 @@ int main(){
 	}
 
 	else{
-		puts(B_RED "Game Over!" C_RESET);
+		// Special message if game has ended
+		if (livingEntities == 0){
+			puts(B_YELLOW "You win!" C_RESET);
+		}
+		
+		else{
+			puts(B_RED "Game Over!" C_RESET);
+		}
 	}
 	
 	// Try to write highscore
