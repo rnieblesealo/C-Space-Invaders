@@ -159,7 +159,7 @@ int main(){
 			break;
 		}
 		
-		ClearDisplay(display, 0);
+		ClearDisplay(display, 1);
 
 		/* Add drawing code here! */
 	
